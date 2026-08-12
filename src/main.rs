@@ -214,20 +214,22 @@ async fn forward_requests(
 	// the output buffer without reading new data.
 	let mut read = true;
 
-	let code = loop {
+	let close_msg = loop {
 		if read {
 			let size @ 1.. = sock_r.read(&mut ws_buf[ws_fill..]).await? else {
-				break 1000;
+				break close_frame(dns_buf.first_chunk_mut().unwrap(), 1000, "");
 			};
 			ws_fill += size;
 		}
 		let (dns_complete, dns_end, pong, ws_pos) =
 			match ws_to_dns(&mut ws_buf[..ws_fill], &mut dns_buf, dns_pos) {
 				Ok(state) => state,
-				Err(code) => break code,
+				Err(code) => break close_frame(dns_buf.first_chunk_mut().unwrap(), code, ""),
 			};
-		if dns_complete > 0 {
-			up_w.write_all(&dns_buf[..dns_complete]).await?;
+		if dns_complete > 0
+			&& let Err(e) = up_w.write_all(&dns_buf[..dns_complete]).await
+		{
+			break close_frame(dns_buf.first_chunk_mut().unwrap(), 1000, e);
 		}
 		if pong > 0
 			&& let Some(sock_w) = sock_w.lock().await.as_mut()
@@ -242,7 +244,6 @@ async fn forward_requests(
 	};
 
 	if let Some(mut sock_w) = sock_w.lock().await.take() {
-		let close_msg = close_frame(dns_buf.first_chunk_mut().unwrap(), code, "");
 		sock_w.write_all(close_msg).await?;
 	}
 

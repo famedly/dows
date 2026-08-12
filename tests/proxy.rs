@@ -82,6 +82,7 @@ impl Harness {
 		// its actual listening address on the first line of stdout.
 		let mut child = Command::new(env!("CARGO_BIN_EXE_dows"))
 			.arg("[::1]:0")
+			.env_remove("DOWS_ALLOWED_UPSTREAMS")
 			.stdin(Stdio::null())
 			.stdout(Stdio::piped())
 			.spawn()
@@ -91,7 +92,9 @@ impl Harness {
 		let mut line = String::new();
 		let endpoint = loop {
 			line.clear();
-			stdout.read_line(&mut line).expect("read proxy address");
+			if stdout.read_line(&mut line).expect("read proxy address") == 0 {
+				panic!("proxy exited before printing listening address");
+			}
 			if let Some(endpoint) = line.strip_prefix("listening on ") {
 				break endpoint.trim().to_owned();
 			}
