@@ -123,14 +123,17 @@ async fn handle_connection(
 
 	let path = request.path.unwrap();
 	let (path, _query) = path.split_once("?").unwrap_or((path, ""));
-	let upstream_addr = path.rsplit_once("/").map(|(_, end)| end).unwrap_or(path);
-	if allowed_upstreams.is_some_and(|x| !x.split(",").any(|x| x == upstream_addr)) {
+	let upstream_addr =
+		parse_upstream_addr(path.rsplit_once("/").map(|(_, end)| end).unwrap_or(path));
+	if allowed_upstreams
+		.is_some_and(|x| !x.split(",").any(|x| parse_upstream_addr(x) == upstream_addr))
+	{
 		let mut buf = [0u8; _];
 		const MESSAGE: &str = "upstream prohibited by proxy configuration";
 		sock.write_all(close_frame(&mut buf, 1000, MESSAGE)).await?;
 		return Ok(());
 	}
-	let mut upstream = match TcpStream::connect(parse_upstream_addr(upstream_addr)).await {
+	let mut upstream = match TcpStream::connect(&upstream_addr).await {
 		Ok(upstream) => upstream,
 		Err(e) => {
 			let mut buf = [0u8; _];

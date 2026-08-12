@@ -23,4 +23,5 @@ The only command line argument is the listener address.
 
 If you expose this service publicly, you can restrict the allowed upstreams by
 setting the environment variable `DOWS_ALLOWED_UPSTREAMS` to a comma-separated
-list of allowed upstreams.
+list of allowed upstreams. Entries are normalized like path segments (URI
+authority, percent-decoded, default port 53) before matching.

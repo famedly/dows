@@ -25,7 +25,7 @@
 
           cargoLock.lockFile = ../Cargo.lock;
 
-          env.GIT_COMMIT_HASH = inputs.self.rev;
+          env.GIT_COMMIT_HASH = inputs.self.rev or inputs.self.dirtyRev or "unknown";
 
           meta = {
             description = "DNS over WebSocket proxy";
