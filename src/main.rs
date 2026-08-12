@@ -195,12 +195,18 @@ async fn forward_requests(
 	// fits maximum sized message with 2 header bytes
 	let mut dns_buf = [0u8; 65535 + 2];
 	let mut dns_pos = 0;
+	// When a completed DNS message frees space but a following WS frame was
+	// rewound (dns_buf was full), translate again before reading more socket
+	// data — the peer may be waiting on a response and send nothing further.
+	let mut read = true;
 
 	let code = loop {
-		let size @ 1.. = sock_r.read(&mut ws_buf[ws_fill..]).await? else {
-			break 1000;
-		};
-		ws_fill += size;
+		if read {
+			let size @ 1.. = sock_r.read(&mut ws_buf[ws_fill..]).await? else {
+				break 1000;
+			};
+			ws_fill += size;
+		}
 		let (dns_complete, dns_end, pong, ws_pos) =
 			match ws_to_dns(&mut ws_buf[..ws_fill], &mut dns_buf, dns_pos) {
 				Ok(state) => state,
@@ -218,6 +224,7 @@ async fn forward_requests(
 		dns_pos = dns_end - dns_complete;
 		ws_buf.copy_within(ws_pos..ws_fill, 0);
 		ws_fill -= ws_pos;
+		read = ws_fill == 0 || dns_complete == 0;
 	};
 
 	if let Some(mut sock_w) = sock_w.lock().await.take() {
