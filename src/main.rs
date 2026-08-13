@@ -79,9 +79,16 @@ async fn handle_connection(
 			return Err(io::ErrorKind::UnexpectedEof.into());
 		};
 		data_len += size;
-		headers = [httparse::EMPTY_HEADER; 32];
+		headers = [httparse::EMPTY_HEADER; 64];
 		request = httparse::Request::new(&mut headers);
 		match request.parse(&buf[..data_len]) {
+			Err(httparse::Error::TooManyHeaders) => {
+				let resp = "HTTP/1.1 431 Request Header Fields Too Large\r\n\
+                    Connection: close\r\n\
+                    Content-Type: text/plain\r\n\r\n";
+				sock.write_all(resp.as_bytes()).await?;
+				return Ok(());
+			}
 			Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidData, e)),
 			Ok(Status::Complete(len)) => break len,
 			_ => {}
