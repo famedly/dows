@@ -98,11 +98,9 @@ async fn handle_connection(mut sock: TcpStream, policy: Arc<Policy>) -> io::Resu
 
 	for h in request.headers.iter() {
 		if h.name.eq_ignore_ascii_case("origin") {
-			if policy
-				.allowed_origins
-				.as_ref()
-				.is_some_and(|x| !x.split(",").any(|x| x.as_bytes() == h.value))
-			{
+			if policy.allowed_origins.as_ref().is_some_and(|x| {
+				!x.split(",").map(str::trim).any(|x| x.as_bytes() == h.value.trim_ascii())
+			}) {
 				let resp = "HTTP/1.1 403 Forbidden\r\n\
                     Connection: close\r\n\
                     Content-Type: text/plain\r\n\r\n";
