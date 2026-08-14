@@ -1,0 +1,7 @@
+.pre-commit-config.yaml linguist-generated
+.github/workflows/build.yml linguist-generated
+.github/workflows/check-pre-commit-hooks.yml linguist-generated
+.github/workflows/tests.yml linguist-generated
+.gitattributes linguist-generated
+treefmt.toml linguist-generated
+rustfmt.toml linguist-generated
