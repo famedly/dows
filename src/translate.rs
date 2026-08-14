@@ -99,11 +99,14 @@ pub fn dns_to_ws(buffer: &mut [u8], offset: usize) -> (usize, usize) {
 /// is the end of the pong area. Pong replies are built in-place at the
 /// beginning of `ws_data`. The fourth returned index is the end of processed
 /// input. Unprocessed input should be supplied at the front on the next call.
+///
+/// On CLOSE or a protocol error, returns `Err((code, dns_data_complete))` so
+/// any DNS messages already completed in this call can still be forwarded.
 pub fn ws_to_dns(
 	ws_data: &mut [u8],
 	dns_data: &mut [u8],
 	mut dns_data_pos: usize,
-) -> Result<(usize, usize, usize, usize), u16> {
+) -> Result<(usize, usize, usize, usize), (u16, usize)> {
 	let mut ws_pos = 0;
 	let mut dns_data_complete = 0;
 	let mut pong_pos = 0;
@@ -114,17 +117,17 @@ pub fn ws_to_dns(
 			// Allow BINARY and continuation frames, with or without FIN.
 			// Allow CLOSE, PING, and PONG with FIN only, as fragmented control frames are illegal.
 			0x00 | 0x02 | 0x80 | 0x82 | 0x88 | 0x89 | 0x8a => {}
-			_ => return Err(1003),
+			_ => return Err((1003, dns_data_complete)),
 		}
 		if minimal_header[1] & MASKED != MASKED {
-			return Err(1002);
+			return Err((1002, dns_data_complete));
 		}
 		let (header_len, fragment_len) = match minimal_header[1] & !MASKED {
 			EXTENDED_LEN_2 => match ws_data.get(ws_pos + 2..).and_then(|x| x.first_chunk()) {
 				Some(&x) => (4, u16::from_be_bytes(x)),
 				_ => break,
 			},
-			EXTENDED_LEN_8 => return Err(1009),
+			EXTENDED_LEN_8 => return Err((1009, dns_data_complete)),
 			simple_len => (2, simple_len.into()),
 		};
 		let Some(mask) =
@@ -140,12 +143,12 @@ pub fn ws_to_dns(
 		let old_ws_pos = ws_pos;
 		ws_pos = data_range.end;
 		if minimal_header[0] == MASKED | CLOSE {
-			return Err(1000);
+			return Err((1000, dns_data_complete));
 		} else if minimal_header[0] == MASKED | PING {
 			let Some(fragment_len) =
 				u8::try_from(fragment_len).ok().filter(|&c| c < EXTENDED_LEN_2)
 			else {
-				return Err(1002);
+				return Err((1002, dns_data_complete));
 			};
 			ws_data[pong_pos] = FIN | PONG;
 			ws_data[pong_pos + 1] = fragment_len;
@@ -157,14 +160,14 @@ pub fn ws_to_dns(
 		} else if minimal_header[0] != MASKED | PONG {
 			let start_new_message = minimal_header[0] & TYPE_MASK == BINARY_DATA;
 			if start_new_message != (dns_data_pos == dns_data_complete) {
-				return Err(1002);
+				return Err((1002, dns_data_complete));
 			}
 			let header_size = if start_new_message { 2 } else { 0 };
 
 			let message_len =
 				dns_data_pos + header_size - dns_data_complete - 2 + usize::from(fragment_len);
 			let Ok(message_len) = u16::try_from(message_len) else {
-				return Err(1009);
+				return Err((1009, dns_data_complete));
 			};
 			if dns_data_pos + header_size + data_range.len() > dns_data.len() {
 				ws_pos = old_ws_pos;

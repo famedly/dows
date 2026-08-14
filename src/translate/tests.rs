@@ -96,14 +96,14 @@ fn ws_to_dns_two_short_messages() {
 fn ws_to_dns_invalid_opcode() {
 	// Opcode 0x1 is a text message (not allowed by DoWS).
 	let mut buf = [FIN | 0x1, MASKED];
-	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err(1003));
+	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err((1003, 0)));
 }
 
 #[test]
 fn ws_to_dns_unmasked() {
 	// Client frames must be masked.
 	let mut buf = [FIN | BINARY_DATA, 0x04];
-	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err(1002));
+	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err((1002, 0)));
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn ws_to_dns_truncated_extended_length() {
 fn ws_to_dns_eight_byte_length() {
 	// The 8-byte extended length never occurs in DoWS and is rejected.
 	let mut buf = [FIN | BINARY_DATA, MASKED | EXTENDED_LEN_8];
-	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err(1009));
+	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err((1009, 0)));
 }
 
 #[test]
@@ -154,7 +154,18 @@ fn ws_to_dns_truncated_data() {
 fn ws_to_dns_close() {
 	// A CLOSE frame maps to a normal-closure error.
 	let mut buf = [FIN | CLOSE, MASKED, 0, 0, 0, 0];
-	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err(1000));
+	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err((1000, 0)));
+}
+
+#[test]
+fn ws_to_dns_query_then_close() {
+	// A complete binary message followed by CLOSE still yields the DNS
+	// bytes; the close code is returned together with the completed length.
+	let mut buf = vec![FIN | BINARY_DATA, MASKED | 3, 0xf0, 0xf0, 0xf0, 0xf0, 1, 2, 3];
+	buf.extend_from_slice(&[FIN | CLOSE, MASKED, 0, 0, 0, 0]);
+	let mut dns_data = [0; 32];
+	assert_eq!(ws_to_dns(&mut buf, &mut dns_data, 0), Err((1000, 5)));
+	assert_eq!(dns_data[..5], [0, 3, 0xf1, 0xf2, 0xf3]);
 }
 
 #[test]
@@ -175,7 +186,7 @@ fn ws_to_dns_ping_too_long() {
 	// Ping frames must not carry more than 125 bytes.
 	let mut buf = vec![FIN | PING, MASKED | EXTENDED_LEN_2, 0, 126, 0, 0, 0, 0];
 	buf.extend(std::iter::repeat_n(0, 126));
-	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err(1002));
+	assert_eq!(ws_to_dns(&mut buf, &mut [], 0), Err((1002, 0)));
 }
 
 #[test]
@@ -195,7 +206,7 @@ fn ws_to_dns_illegal_continuation() {
 	// A continuation frame with no message in progress is illegal.
 	let mut buf = [FIN, MASKED | 2, 0xf0, 0xf0, 0xf0, 0xf0, 1, 2];
 	let mut dns_data = [0; 8];
-	assert_eq!(ws_to_dns(&mut buf, &mut dns_data, 0), Err(1002));
+	assert_eq!(ws_to_dns(&mut buf, &mut dns_data, 0), Err((1002, 0)));
 }
 
 #[test]
@@ -244,5 +255,5 @@ fn ws_to_dns_message_too_long() {
 	buf.extend(std::iter::repeat_n(0, 65535));
 	// 1 free byte in addition to the partial DNS message from to the first fragment
 	let mut dns_data = vec![0; 65535 + 2 + 1];
-	assert_eq!(ws_to_dns(&mut buf, &mut dns_data, 0), Err(1009));
+	assert_eq!(ws_to_dns(&mut buf, &mut dns_data, 0), Err((1009, 0)));
 }

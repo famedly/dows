@@ -248,7 +248,12 @@ async fn forward_requests(
 		let (dns_complete, dns_end, pong, ws_pos) =
 			match ws_to_dns(&mut ws_buf[..ws_fill], &mut dns_buf, dns_pos) {
 				Ok(state) => state,
-				Err(code) => break code,
+				Err((code, dns_complete)) => {
+					if dns_complete > 0 && up_w.write_all(&dns_buf[..dns_complete]).await.is_err() {
+						break 1000;
+					}
+					break code;
+				}
 			};
 		if dns_complete > 0 {
 			if up_w.write_all(&dns_buf[..dns_complete]).await.is_err() {
