@@ -1,0 +1,66 @@
+repos:
+- hooks:
+  - id: check-added-large-files
+  - id: check-case-conflict
+  - id: check-illegal-windows-names
+  - id: end-of-file-fixer
+  - id: fix-byte-order-marker
+  - id: check-json
+  - id: check-json5
+  - id: check-toml
+  - id: check-vcs-permalinks
+  - id: check-xml
+  - args:
+    - --fix=lf
+    id: mixed-line-ending
+  - id: check-symlinks
+  - id: destroyed-symlinks
+  - id: check-merge-conflict
+  - id: detect-private-key
+  - id: check-shebang-scripts-are-executable
+  - id: check-executables-have-shebangs
+  repo: builtin
+- hooks:
+  - args:
+    - --write-changes
+    - --force-exclude
+    description: Check the repository for spelling mistakes
+    entry: typos
+    id: typos
+    language: system
+    name: typos
+    types:
+    - text
+  - description: Ensure that files set up with the filegen module are up-to-date
+    entry: filegen-apply-script
+    id: filegen
+    language: system
+    name: filegen
+    pass_filenames: false
+  - description: Format *all* files
+    entry: treefmt
+    id: treefmt
+    language: system
+    name: treefmt
+    require_serial: true
+  repo: local
+- hooks:
+  - args:
+    - follow
+    description: Ensure that flake inputs are recursively de-duplicated
+    entry: flake-edit
+    files:
+      glob: '{flake.nix,flake.lock}'
+    id: flake-follows
+    language: system
+    name: flake-follows
+    pass_filenames: false
+  repo: local
+- hooks:
+  - description: Check licensing info for REUSE compliance
+    entry: reuse lint
+    id: reuse
+    language: system
+    name: reuse
+    pass_filenames: false
+  repo: local
